@@ -782,7 +782,7 @@ def main_menu(surface):
 
     label1 = font.render('Press space to play as GUEST', 1, (255,255,255))
     label2 = font.render('Press u to login/register as USER', 1, (255, 255, 255))
-    image = pygame.image.load(r"C:\Users\joyce\PycharmProjects\games\tetris-logo.jpg")
+    image = pygame.image.load(r"tetris-logo.jpg")
 
     run = True
     while run:
