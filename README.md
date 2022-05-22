@@ -1,2 +1,2 @@
 # Tetris
-tetris game using pygame
+tetris game using pygame and tkinter
