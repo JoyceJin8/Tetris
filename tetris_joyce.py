@@ -1,7 +1,19 @@
 import pygame
+from tkinter import *
+from  tkinter import ttk
+import tkinter as tk
 import random
+import sqlite3
+import time
+from datetime import date
+
 
 pygame.init()
+
+con = sqlite3.connect('userscore.db')
+cur = con.cursor()
+cur.execute('''CREATE TABLE IF NOT EXISTS tscores
+                (username text, score int, date text)''')
 
 I = [['0000',
       '1111',
@@ -159,7 +171,7 @@ def get_shape():
 
     return Peice(shape, colour, rotation, x, y)
 
-def check_lost(locked_pos, surface, score):
+def check_lost(locked_pos, surface, score, username):
     for pos in locked_pos:
         if pos[1] <= 0:
             myfont = pygame.font.SysFont("Futura", 50)
@@ -168,7 +180,7 @@ def check_lost(locked_pos, surface, score):
             surface.blit(label, (320, 300))
             pygame.display.update()
             pygame.time.delay(2000)
-            update_score(score)
+            update_score(username, score)
             return True
 
     return False
@@ -296,21 +308,33 @@ def save_position(curr_shape, locked_pos):
     return locked_pos
 
 
-def draw_score(surface, score = 0, high_score = 0): #display score
+def draw_score(surface, high_score, score=0): #display score
     #score
     myfont = pygame.font.SysFont("monospace", 20)
-    label = myfont.render('Score: ' + str(score), 1, (255,255,255))
-    surface.blit(label, (580, 400))
+    label1 = myfont.render('Score: ', 1, (255,255,255))
+    surface.blit(label1, (580, 400))
+    label2 = myfont.render(str(score), 1, (255, 255, 255))
+    surface.blit(label2, (680, 400))
 
     #high score
-    label = myfont.render('High Score: ' + high_score, 1, (255, 255, 255))
-    sx = 200
-    sy = 150
+    label = myfont.render('High Score: ' + str(high_score), 1, (255, 255, 255))
     surface.blit(label, (580, 450))
+    pygame.display.update()
+
+
+def draw_player(surface,username):
+    x_pos = 50
+    y_pos = 50
+
+    myfont = pygame.font.SysFont("monospace", 20)
+
+    label = myfont.render("Player: "+ username, 1, (255, 0, 0))
+    surface.blit(label, (x_pos, y_pos))
+
 
 def draw_holdshape(hold_shape, surface):
     x_pos = 50
-    y_pos = 100
+    y_pos = 200
 
     myfont = pygame.font.SysFont("monospace", 20)
 
@@ -397,23 +421,21 @@ def draw_grid(surface):
                              (grid_x + (x * (t_width / column)), grid_y + t_height))
 
 
-def update_score(new_score):
-    score = max_score()
+def update_score(username, new_score):
+    cur.execute("INSERT INTO tscores VALUES (?,?,?)",
+                   (username, new_score, date.today().strftime('%d/%m/%Y')))
+    con.commit()
 
-    with open('scores.txt', 'w') as f:
-        if new_score > int(score):
-            f.write(str(new_score))  # overwrites any existing content
+def max_score(name):
+    cur.execute('SELECT MAX(score) FROM tscores WHERE username=?', [name])
+    return cur.fetchone()[0]
 
+def main(username):
+    if username == "guest":
+        high_score = "n/a"
+    else:
+        high_score = max_score(username)
 
-def max_score():
-    with open('scores.txt', 'r') as f:
-        lines = f.readlines()
-        score = lines[0].strip()
-    return score
-
-
-def main():
-    high_score = max_score()
     pygame.init()
     surface = pygame.display.set_mode((s_width, s_height))
 
@@ -426,10 +448,9 @@ def main():
     fall_time = 0
     fall_speed = 0.27
     level_time = 0
-    score = 0
+    score=0
 
     while True:
-
         fall_time += clock.get_rawtime()
         level_time += clock.get_rawtime()
         clock.tick()
@@ -506,29 +527,282 @@ def main():
 
         draw_locked(locked_positions, surface)
         draw_holdshape(holdshape, surface)
-        draw_score(surface, score, high_score)
+        draw_score(surface, high_score, score)
+        draw_player(surface, username)
         pygame.display.update()
 
-        if check_lost(locked_positions, surface, score):
+        if check_lost(locked_positions, surface, score, username):
             break
+
+
+def user_stats(name):
+    global screen_s
+    #screen_s = Toplevel(root)
+    #screen_s.title("stats")
+    #screen_s.geometry("500x500")
+
+    # Creating tkinter window
+    window = tk.Tk()
+    window.resizable(width=1, height=1)
+    window.title("STATS")
+
+    # Using treeview widget
+    treev = ttk.Treeview(window, selectmode='browse')
+
+    # Calling pack method w.r.to treeview
+    treev.pack(side=RIGHT)
+
+    # Constructing vertical scrollbar
+    # with treeview
+    verscrlbar = ttk.Scrollbar(window,
+                               orient="vertical",
+                               command=treev.yview)
+
+    # Calling pack method w.r.to vertical
+    # scrollbar
+    verscrlbar.pack(side='right', fill='x')
+
+    # Configuring treeview
+    treev.configure(xscrollcommand=verscrlbar.set)
+
+    # Defining number of columns
+    treev["columns"] = ("1", "2", "3")
+    # Defining heading
+    treev['show'] = 'headings'
+
+    # Assigning the width and anchor to  the
+    # respective columns
+    treev.column("1", width=90, anchor='c')
+    treev.column("2", width=90, anchor='se')
+    treev.column("3", width=90, anchor='se')
+
+    # Assigning the heading names to the
+    # respective columns
+
+    treev.heading("1", text="Player")
+    treev.heading("2", text="Score")
+    treev.heading("3", text="Date")
+
+    # Inserting the items and their features to the
+    # columns built
+
+    cur.execute('SELECT username, score, date FROM tscores WHERE username=?', [name])
+    lst = cur.fetchall()
+
+    for value in lst:
+        treev.insert("", 'end', text="L1",
+                     values=(value[0], value[1], value[2]))
+
+
+    # Using treeview widget
+    tree2 = ttk.Treeview(window, selectmode='browse')
+
+    # Calling pack method w.r.to treeview
+    tree2.pack(side=LEFT)
+
+    # Constructing vertical scrollbar
+    # with treeview
+    verscrlbar = ttk.Scrollbar(window,
+                               orient="vertical",
+                               command=tree2.yview)
+
+    # Calling pack method w.r.to vertical
+    # scrollbar
+    verscrlbar.pack(side='left', fill='x')
+
+    # Configuring treeview
+    tree2.configure(xscrollcommand=verscrlbar.set)
+
+    # Defining number of columns
+    tree2["columns"] = ("1", "2")
+    # Defining heading
+    tree2['show'] = 'headings'
+
+    # Assigning the width and anchor to  the
+    # respective columns
+    tree2.column("1", width=90, anchor='c')
+    tree2.column("2", width=90, anchor='se')
+
+    # Assigning the heading names to the
+    # respective columns
+
+    tree2.heading("1", text="Player")
+    tree2.heading("2", text="Score")
+
+    # Inserting the items and their features to the
+    # columns built
+
+    cur.execute('SELECT username, MAX(score) FROM tscores GROUP BY username ORDER BY 2 DESC LIMIT 5')
+    lst_scoreboard = cur.fetchall()
+
+    for info in lst_scoreboard:
+        tree2.insert("", 'end', text="L1",
+                     values=(info[0], info[1]))
+
+    cur.execute('SELECT AVG(score) FROM tscores WHERE username=?', [name])
+    avgscore = cur.fetchone()[0]
+    Label(window, text="Average Score: " + str(avgscore), width=20, heigh=5).pack(side=BOTTOM)
+
+    cur.execute('SELECT MAX(score) FROM tscores WHERE username=?', [name])
+    highscore = cur.fetchone()[0]
+    Label(window, text="High Score: " + str(highscore), width=20, heigh=5).pack(side=BOTTOM)
+
+    cur.execute('SELECT COUNT(*) FROM tscores WHERE username=?', [name])
+    highscore = cur.fetchone()[0]
+    Label(window, text="Games Played: " + str(highscore), width=20, heigh=5).pack(side=BOTTOM)
+
+    window.mainloop()
+
+def start(username):
+    screen_g.destroy()
+    screen_l.destroy()
+    root.destroy()
+    main(username)
+
+def before_game(username):
+    global screen_g
+    screen_g = Toplevel(root)
+    screen_g.title("user")
+    screen_g.geometry("300x250")
+
+    Label(screen_g, text="").pack()
+    Button(screen_g, text="Stats", width=20, heigh=5, command=lambda: user_stats(username)).pack()
+    Label(screen_g, text="").pack()
+    Button(screen_g, text="Start Game", width=20, heigh=5, command=lambda : start(username)).pack()
+    Label(screen_g, text="").pack()
+
+
+def register_user():
+    username_info = username.get()
+    password_info = password.get()
+
+    file=open("userinfo.txt", "a")
+    file.write(username_info)
+    file.write(" ")
+    file.write(password_info)
+    file.write("\n")
+    file.close
+
+    username_entry.delete(0,END)
+    password_entry.delete(0,END)
+
+    Label(screen_r, text = "Regristration Sucess", fg="green").pack()
+    screen_r.destroy()
+
+def register():
+    global screen_r
+    screen_r = Toplevel(root)
+    screen_r.title("Register")
+    screen_r.geometry("300x250")
+
+    global username
+    global password
+    global username_entry
+    global password_entry
+
+    username = StringVar()
+    password = StringVar()
+
+    Label(screen_r, text="Please enter details below").pack()
+    Label(screen_r, text="").pack()
+    Label(screen_r, text="Username * ").pack()
+    username_entry = Entry(screen_r, textvariable = username)
+    username_entry.pack()
+    Label(screen_r, text="Password * ").pack()
+    password_entry= Entry(screen_r,textvariable=password)
+    password_entry.pack()
+    Label(screen_r, text="").pack()
+
+    Button(screen_r, text="Register", width="10", height="1", command = register_user).pack()
+
+
+def login_verify():
+    username1 = username_verify.get()
+    password1 = password_verify.get()
+
+    username_entry1.delete(0, END)
+    password_entry1.delete(0, END)
+
+    for line in open("userinfo.txt","r").readlines(): # Read the lines
+        login_info = line.split() # Split on the space, and store the results in a list of two strings
+        if username1 == login_info[0]:
+            if password1 == login_info[1]:
+                Label(screen_l, text="login sucess").place(x=100, y=200)
+                before_game(username1)
+                break
+            else:
+                Label(screen_l, text="incorrect password").place(x=100, y=200)
+        else:
+            Label(screen_l, text="user not found").place(x=100, y=200)
+
+def login():
+    global screen_l
+    screen_l = Toplevel(root)
+    screen_l.title("Login")
+    screen_l.geometry("300x250")
+    Label(screen_l, text="Please enter details below to login").pack()
+    Label(screen_l, text="").pack()
+
+    global username_verify
+    global password_verify
+
+    username_verify = StringVar()
+    password_verify = StringVar()
+
+    global username_entry1
+    global password_entry1
+
+    Label(screen_l, text="Username * ").pack()
+    username_entry1 = Entry(screen_l, textvariable=username_verify)
+    username_entry1.pack()
+    Label(screen_l, text="Password * ").pack()
+    password_entry1 = Entry(screen_l, textvariable=password_verify)
+    password_entry1.pack()
+    Label(screen_l, text="").pack()
+
+    Button(screen_l, text="Login", width=10, heigh=1,command=login_verify).pack()
+
+def login_register():
+    global root
+    root = Tk()
+    root.title("Login/Register")
+    root.geometry("300x200")
+
+    Label(text="Login or Register", bg="grey", width="300", height="2").pack()
+    Label(text="").pack()
+    Button(text="Login", width="30", height="2", command=login).pack()
+    Label(text="").pack()
+    Button(text="Register", width="30", height="2", command=register).pack()
+    Label(text="").pack()
+
+    root.mainloop()
 
 def main_menu(surface):
     font = pygame.font.SysFont('timesnewroman', 30)
-    label = font.render('Press any key to begin.', 1, (255,255,255))
+
+    label1 = font.render('Press space to play as GUEST', 1, (255,255,255))
+    label2 = font.render('Press u to login/register as USER', 1, (255, 255, 255))
     image = pygame.image.load(r"C:\Users\joyce\PycharmProjects\games\tetris-logo.jpg")
 
     run = True
     while run:
         win.fill((0,0,0))
         win.blit(image, (100, 100))
-        surface.blit(label, (270, 550))
+        surface.blit(label1, (260, 550))
+        surface.blit(label2, (270, 600))
         pygame.display.update()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
 
             if event.type == pygame.KEYDOWN:
-                main()
+                if event.key == pygame.K_SPACE:
+                    main("guest")
+                if event.key == pygame.K_u:
+                    login_register()
+                break
+
     pygame.quit()
 
 
